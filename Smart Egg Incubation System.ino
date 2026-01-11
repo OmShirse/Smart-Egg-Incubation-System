@@ -19,6 +19,16 @@
  * - Days 19-21: Humidity 65-75% (Lockdown period)
  *************************************************************/
 
+// ============== BLYNK CONFIGURATION ==============
+// IMPORTANT: Get these from your Blynk.Console
+// Go to: https://blynk.cloud → Templates → Your Template
+#define BLYNK_TEMPLATE_ID "TMPL0000000"           // Replace with your Template ID
+#define BLYNK_TEMPLATE_NAME "Egg Incubator"       // Replace with your Template Name
+#define BLYNK_AUTH_TOKEN "Your_Auth_Token_Here"   // Replace with your Auth Token
+
+// Comment this out to disable prints and save space
+#define BLYNK_PRINT Serial
+
 // Include required libraries
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
@@ -29,8 +39,7 @@
 char ssid[] = "Your_WiFi_Name";          // Your WiFi SSID
 char pass[] = "Your_WiFi_Password";      // Your WiFi Password
 
-// Replace with your Blynk Auth Token
-char auth[] = "Your_Blynk_Auth_Token";
+// Note: BLYNK_AUTH_TOKEN is defined above with BLYNK_TEMPLATE_ID
 
 // DHT11 Sensor Configuration
 #define DHTPIN D4              // DHT11 connected to GPIO D4
@@ -116,7 +125,7 @@ void setup() {
   
   // Connect to WiFi and Blynk
   Serial.print("Connecting to WiFi");
-  Blynk.begin(auth, ssid, pass);
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
   
   // Wait for connection
   while (WiFi.status() != WL_CONNECTED) {
