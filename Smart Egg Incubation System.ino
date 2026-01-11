@@ -1,5 +1,5 @@
 /*************************************************************
- * Smart Egg Incubation System
+ * Smart Egg Incubation System - Stage-based Control
  * 
  * Hardware Required:
  * - ESP8266 (NodeMCU)
@@ -10,10 +10,13 @@
  * 
  * Blynk Setup:
  * - Create new template in Blynk IoT
- * - Add Datastreams: V0 (Temperature), V1 (Humidity)
- * - Add Gauge widgets connected to V0 and V1
+ * - Add Datastreams: V0 (Temperature), V1 (Humidity), V5 (Day Counter)
+ * - Add Gauge widgets connected to V0, V1, and V5
  * 
- * Target: 35°C Temperature, 85% Humidity
+ * Incubation Parameters:
+ * - Temperature: 37°C (constant throughout 21 days)
+ * - Days 1-18: Humidity 50-55%
+ * - Days 19-21: Humidity 65-75% (Lockdown period)
  *************************************************************/
 
 // Include required libraries
@@ -27,7 +30,6 @@ char ssid[] = "Your_WiFi_Name";          // Your WiFi SSID
 char pass[] = "Your_WiFi_Password";      // Your WiFi Password
 
 // Replace with your Blynk Auth Token
-// Get this from Blynk IoT Console
 char auth[] = "Your_Blynk_Auth_Token";
 
 // DHT11 Sensor Configuration
@@ -39,13 +41,24 @@ DHT dht(DHTPIN, DHTTYPE);
 #define HEATER_PIN D5          // Heater relay connected to GPIO D5
 #define HUMIDIFIER_PIN D6      // Humidifier relay connected to GPIO D6
 
-// Target Values
-#define TARGET_TEMP 35.0       // Target temperature in Celsius
-#define TARGET_HUMIDITY 85.0   // Target humidity in percentage
+// Target Temperature (Constant for all 21 days)
+#define TARGET_TEMP 37.0       // Target temperature in Celsius
+
+// Stage-based Humidity Targets
+#define HUMIDITY_STAGE1_MIN 50.0   // Days 1-18: Minimum humidity
+#define HUMIDITY_STAGE1_MAX 55.0   // Days 1-18: Maximum humidity
+#define HUMIDITY_STAGE2_MIN 65.0   // Days 19-21: Minimum humidity (Lockdown)
+#define HUMIDITY_STAGE2_MAX 75.0   // Days 19-21: Maximum humidity (Lockdown)
 
 // Control Thresholds (Hysteresis to prevent rapid switching)
 #define TEMP_TOLERANCE 0.5     // Temperature tolerance (±0.5°C)
 #define HUMID_TOLERANCE 2.0    // Humidity tolerance (±2%)
+
+// Incubation Timeline
+#define INCUBATION_STAGE1_DAYS 18  // First stage duration (days)
+#define TOTAL_INCUBATION_DAYS 21   // Total incubation period (days)
+#define HOURS_PER_DAY 24
+#define MILLIS_PER_HOUR 3600000UL  // Milliseconds in one hour
 
 // Timing Configuration
 #define READ_INTERVAL 2000     // Read sensor every 2 seconds
@@ -59,12 +72,22 @@ unsigned long lastBlynkTime = 0;
 bool heaterState = false;
 bool humidifierState = false;
 
+// Incubation timing variables
+unsigned long incubationStartTime = 0;
+int currentDay = 1;
+float targetHumidityMin = HUMIDITY_STAGE1_MIN;
+float targetHumidityMax = HUMIDITY_STAGE1_MAX;
+String currentStage = "Stage 1";
+
 // Virtual Pins for Blynk
 #define VPIN_TEMP V0
 #define VPIN_HUMIDITY V1
 #define VPIN_HEATER_STATUS V2
 #define VPIN_HUMIDIFIER_STATUS V3
 #define VPIN_SYSTEM_STATUS V4
+#define VPIN_DAY_COUNTER V5
+#define VPIN_STAGE_INFO V6
+#define VPIN_RESET_TIMER V7
 
 // ============== SETUP FUNCTION ==============
 void setup() {
@@ -74,6 +97,7 @@ void setup() {
   
   Serial.println("\n\n=================================");
   Serial.println("Smart Egg Incubation System");
+  Serial.println("Stage-based Humidity Control");
   Serial.println("=================================\n");
   
   // Initialize relay pins as outputs
@@ -104,10 +128,22 @@ void setup() {
   Serial.print("IP Address: ");
   Serial.println(WiFi.localIP());
   Serial.println("Connected to Blynk!");
-  Serial.println("\n=================================\n");
+  
+  // Start incubation timer
+  incubationStartTime = millis();
+  
+  Serial.println("\n=================================");
+  Serial.println("INCUBATION STARTED");
+  Serial.println("Day 1 of 21");
+  Serial.println("Stage 1: Days 1-18");
+  Serial.println("Temperature: 37°C");
+  Serial.println("Humidity: 50-55%");
+  Serial.println("=================================\n");
   
   // Send initial status to Blynk
-  Blynk.virtualWrite(VPIN_SYSTEM_STATUS, "System Started");
+  Blynk.virtualWrite(VPIN_SYSTEM_STATUS, "System Started - Day 1");
+  Blynk.virtualWrite(VPIN_DAY_COUNTER, 1);
+  Blynk.virtualWrite(VPIN_STAGE_INFO, "Stage 1: 50-55% RH");
   
   delay(2000); // Wait for sensor to stabilize
 }
@@ -116,6 +152,9 @@ void setup() {
 void loop() {
   // Run Blynk
   Blynk.run();
+  
+  // Update incubation day
+  updateIncubationDay();
   
   // Read sensor data at specified interval
   if (millis() - lastReadTime >= READ_INTERVAL) {
@@ -131,6 +170,59 @@ void loop() {
   }
 }
 
+// ============== UPDATE INCUBATION DAY ==============
+void updateIncubationDay() {
+  unsigned long elapsedTime = millis() - incubationStartTime;
+  int calculatedDay = (elapsedTime / MILLIS_PER_HOUR / HOURS_PER_DAY) + 1;
+  
+  // Check if day has changed
+  if (calculatedDay != currentDay && calculatedDay <= TOTAL_INCUBATION_DAYS) {
+    currentDay = calculatedDay;
+    
+    // Update humidity targets based on stage
+    if (currentDay <= INCUBATION_STAGE1_DAYS) {
+      // Stage 1: Days 1-18
+      targetHumidityMin = HUMIDITY_STAGE1_MIN;
+      targetHumidityMax = HUMIDITY_STAGE1_MAX;
+      currentStage = "Stage 1";
+      
+      Serial.println("\n*** DAY " + String(currentDay) + " of 21 ***");
+      Serial.println("Stage 1: Development Phase");
+      Serial.println("Target Humidity: 50-55%");
+    } else {
+      // Stage 2: Days 19-21 (Lockdown period)
+      targetHumidityMin = HUMIDITY_STAGE2_MIN;
+      targetHumidityMax = HUMIDITY_STAGE2_MAX;
+      currentStage = "Stage 2 (Lockdown)";
+      
+      Serial.println("\n*** DAY " + String(currentDay) + " of 21 ***");
+      Serial.println("Stage 2: LOCKDOWN PERIOD");
+      Serial.println("Target Humidity: 65-75%");
+      Serial.println("⚠️  DO NOT OPEN INCUBATOR!");
+    }
+    
+    Serial.println("Target Temperature: 37°C");
+    Serial.println();
+    
+    // Send day update to Blynk
+    Blynk.virtualWrite(VPIN_DAY_COUNTER, currentDay);
+    String stageInfo = currentStage + ": " + String(targetHumidityMin, 0) + "-" + String(targetHumidityMax, 0) + "% RH";
+    Blynk.virtualWrite(VPIN_STAGE_INFO, stageInfo);
+    
+    if (currentDay == 19) {
+      Blynk.virtualWrite(VPIN_SYSTEM_STATUS, "⚠️ LOCKDOWN Started - Day 19");
+    }
+  }
+  
+  // Check if incubation is complete
+  if (calculatedDay > TOTAL_INCUBATION_DAYS) {
+    Serial.println("\n🎉 INCUBATION COMPLETE! 🎉");
+    Serial.println("21 days completed. Check for hatching!");
+    Blynk.virtualWrite(VPIN_SYSTEM_STATUS, "✓ Incubation Complete - Check eggs!");
+    delay(60000); // Wait 1 minute before next check
+  }
+}
+
 // ============== SENSOR READING ==============
 void readSensorData() {
   // Read temperature and humidity
@@ -140,7 +232,7 @@ void readSensorData() {
   // Check if readings are valid
   if (isnan(temp) || isnan(humid)) {
     Serial.println("ERROR: Failed to read from DHT sensor!");
-    Blynk.virtualWrite(VPIN_SYSTEM_STATUS, "Sensor Error");
+    Blynk.virtualWrite(VPIN_SYSTEM_STATUS, "⚠️ Sensor Error");
     return;
   }
   
@@ -150,23 +242,30 @@ void readSensorData() {
   
   // Display on Serial Monitor
   Serial.println("------ Sensor Reading ------");
+  Serial.print("Day: ");
+  Serial.print(currentDay);
+  Serial.print(" | Stage: ");
+  Serial.println(currentStage);
+  
   Serial.print("Temperature: ");
-  Serial.print(currentTemp);
+  Serial.print(currentTemp, 1);
   Serial.print("°C  |  Target: ");
-  Serial.print(TARGET_TEMP);
+  Serial.print(TARGET_TEMP, 1);
   Serial.println("°C");
   
   Serial.print("Humidity: ");
-  Serial.print(currentHumidity);
+  Serial.print(currentHumidity, 1);
   Serial.print("%  |  Target: ");
-  Serial.print(TARGET_HUMIDITY);
+  Serial.print(targetHumidityMin, 0);
+  Serial.print("-");
+  Serial.print(targetHumidityMax, 0);
   Serial.println("%");
   Serial.println("----------------------------\n");
 }
 
 // ============== CONTROL SYSTEM ==============
 void controlSystem() {
-  // Temperature Control
+  // Temperature Control (Constant 37°C for all 21 days)
   if (currentTemp < (TARGET_TEMP - TEMP_TOLERANCE)) {
     // Too cold - Turn heater ON
     if (!heaterState) {
@@ -184,8 +283,10 @@ void controlSystem() {
     }
   }
   
-  // Humidity Control
-  if (currentHumidity < (TARGET_HUMIDITY - HUMID_TOLERANCE)) {
+  // Humidity Control (Stage-based)
+  float targetHumidityMid = (targetHumidityMin + targetHumidityMax) / 2.0;
+  
+  if (currentHumidity < (targetHumidityMin + HUMID_TOLERANCE)) {
     // Too dry - Turn humidifier ON
     if (!humidifierState) {
       digitalWrite(HUMIDIFIER_PIN, LOW);  // LOW = ON
@@ -193,7 +294,7 @@ void controlSystem() {
       Serial.println(">>> HUMIDIFIER: ON (Humidity too low)");
     }
   } 
-  else if (currentHumidity > (TARGET_HUMIDITY + HUMID_TOLERANCE)) {
+  else if (currentHumidity > (targetHumidityMax - HUMID_TOLERANCE)) {
     // Too humid - Turn humidifier OFF
     if (humidifierState) {
       digitalWrite(HUMIDIFIER_PIN, HIGH);  // HIGH = OFF
@@ -220,18 +321,50 @@ void sendToBlynk() {
   Blynk.virtualWrite(VPIN_HEATER_STATUS, heaterState ? "ON" : "OFF");
   Blynk.virtualWrite(VPIN_HUMIDIFIER_STATUS, humidifierState ? "ON" : "OFF");
   
+  // Send day counter and stage info
+  Blynk.virtualWrite(VPIN_DAY_COUNTER, currentDay);
+  String stageInfo = currentStage + ": " + String(targetHumidityMin, 0) + "-" + String(targetHumidityMax, 0) + "% RH";
+  Blynk.virtualWrite(VPIN_STAGE_INFO, stageInfo);
+  
   // Send system status
-  String status = "Temp: " + String(currentTemp, 1) + "°C | Humid: " + String(currentHumidity, 1) + "%";
+  String status = "Day " + String(currentDay) + " | " + String(currentTemp, 1) + "°C | " + String(currentHumidity, 1) + "%";
   Blynk.virtualWrite(VPIN_SYSTEM_STATUS, status);
   
   Serial.println("✓ Data sent to Blynk app");
   Serial.println();
 }
 
+// ============== BLYNK BUTTON TO RESET TIMER ==============
+BLYNK_WRITE(VPIN_RESET_TIMER) {
+  int value = param.asInt();
+  
+  if (value == 1) {
+    // Reset incubation timer
+    incubationStartTime = millis();
+    currentDay = 1;
+    targetHumidityMin = HUMIDITY_STAGE1_MIN;
+    targetHumidityMax = HUMIDITY_STAGE1_MAX;
+    currentStage = "Stage 1";
+    
+    Serial.println("\n=================================");
+    Serial.println("INCUBATION TIMER RESET");
+    Serial.println("Starting Day 1 of 21");
+    Serial.println("=================================\n");
+    
+    Blynk.virtualWrite(VPIN_DAY_COUNTER, 1);
+    Blynk.virtualWrite(VPIN_STAGE_INFO, "Stage 1: 50-55% RH");
+    Blynk.virtualWrite(VPIN_SYSTEM_STATUS, "Timer Reset - Day 1 Started");
+  }
+}
+
 // ============== BLYNK CONNECTED EVENT ==============
 BLYNK_CONNECTED() {
   Serial.println("Blynk Connected!");
-  Blynk.virtualWrite(VPIN_SYSTEM_STATUS, "Online");
+  
+  // Send current status
+  Blynk.virtualWrite(VPIN_DAY_COUNTER, currentDay);
+  String stageInfo = currentStage + ": " + String(targetHumidityMin, 0) + "-" + String(targetHumidityMax, 0) + "% RH";
+  Blynk.virtualWrite(VPIN_STAGE_INFO, stageInfo);
   
   // Sync all virtual pins
   Blynk.syncAll();
