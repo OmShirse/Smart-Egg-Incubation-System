@@ -1,140 +1,141 @@
 # 🥚 Smart Egg Incubation System
 
-**ESP8266 | DHT11 | Blynk IoT | Stage-Based Control**
+> **IoT-based automated egg incubator** — ESP8266 + DHT11 + Blynk with stage-based temperature/humidity control over a 21-day cycle.
+
+[![GitHub](https://img.shields.io/badge/GitHub-OmShirse-blue?logo=github)](https://github.com/OmShirse/Smart-Egg-Incubation-System)
 
 ---
 
 ## 📌 Project Description
 
-The **Smart Egg Incubation System** is an IoT-based embedded system designed to automate the incubation process of eggs by maintaining **precise temperature and humidity conditions** over a **21-day incubation cycle**.
+The **Smart Egg Incubation System** automates the egg incubation process by maintaining **precise temperature (37 °C) and humidity** conditions through a **21-day cycle**. It uses:
 
-The system uses an **ESP8266 (NodeMCU)** microcontroller, a **DHT11 temperature and humidity sensor**, and **relay-controlled heating and humidification elements**. Real-time monitoring and control are provided through the **Blynk IoT platform**.
+- **ESP8266 (NodeMCU)** — main microcontroller with Wi-Fi
+- **DHT11** — temperature & humidity sensor
+- **Relay-controlled heater** and **mist humidifier**
+- **Blynk IoT** — real-time mobile monitoring & control
 
-The incubation process is divided into **two stages**, with automatic adjustment of humidity levels while maintaining a constant temperature.
+The incubation cycle is divided into **two stages** with automatic humidity adjustment while keeping temperature constant.
 
 ---
 
 ## 🎯 Objectives
 
-* Maintain **constant temperature at 37 °C**
-* Implement **stage-based humidity control**
-* Automate incubation timing (21 days)
-* Provide **real-time monitoring via mobile app**
-* Reduce manual intervention and human error
+| Goal | Implementation |
+|---|---|
+| Constant 37 °C temperature | PID/threshold relay control of heater |
+| Stage-based humidity | Stage 1: 55–60% RH · Stage 2: 65–70% RH |
+| 21-day automation | Internal timer with day-tracking |
+| Real-time monitoring | Blynk app dashboard (temp, humidity, stage) |
+| Minimal human intervention | Fully autonomous with fault alerts |
 
 ---
 
-## ⚙️ System Block Diagram
+## ⚙️ System Architecture
 
-The following block diagram illustrates the overall architecture and signal flow of the system:
+```
+[DHT11 Sensor]
+      │  temp + humidity
+      ▼
+[ESP8266 NodeMCU]
+   ├─► [Relay 1] ──► [Heating Element]
+   ├─► [Relay 2] ──► [Mist Humidifier / Water Pump]
+   ├─► [LCD 16x2] (local display)
+   └─► [Blynk Cloud] ──► [Mobile App]
+```
 
-🔗 **Block Diagram:**
-[Click to view Block Diagram](https://github.com/OmShirse/Smart-Egg-Incubation-System/blob/7ea6b5472672305fc80a21d23a12cebe9834e551/Smart%20Egg%20Incubation%20System.png)
-
-**Description:**
-
-* The **DHT11 sensor** continuously measures temperature and humidity.
-* Sensor data is processed by the **ESP8266 microcontroller**.
-* Based on predefined thresholds, control signals are sent to:
-
-  * **Heating element** (via relay)
-  * **Humidifier / water pump** (via relay)
-* Data is transmitted to the **Blynk IoT platform** over Wi-Fi for monitoring.
+**Block Diagram:** [View on GitHub](https://github.com/OmShirse/Smart-Egg-Incubation-System/blob/main/Smart%20Egg%20Incubation%20System.png)
 
 ---
 
 ## 🧩 Hardware Components
 
-| Component               | Description                      |
-| ----------------------- | -------------------------------- |
-| ESP8266 NodeMCU         | Main control unit                |
-| DHT11 Sensor            | Temperature and humidity sensing |
-| 2-Channel Relay Module  | Controls heater and humidifier   |
-| Heating Element         | Maintains incubation temperature |
-| Humidifier / Water Pump | Controls humidity                |
-| Wi-Fi Network           | IoT connectivity                 |
+| Component | Description |
+|---|---|
+| ESP8266 NodeMCU | Main controller (Wi-Fi built-in) |
+| DHT11 | Temperature & humidity sensor |
+| Relay Module (2-ch) | Controls heater and humidifier |
+| Heating Element / Bulb | 25W–40W incandescent or heating pad |
+| Mist Humidifier / Pump | Ultrasonic mist maker or water pump |
+| LCD 16×2 (I2C) | Local status display |
+| Power Supply | 5V/3A for ESP8266 + 12V for relays |
 
 ---
 
 ## 💻 Software Requirements
 
-* Arduino IDE
-* ESP8266 Board Package
-* Required Libraries:
-
-  * `ESP8266WiFi.h`
-  * `BlynkSimpleEsp8266.h`
-  * `DHT.h`
-
----
-
-## 📱 Blynk IoT Configuration
-
-The system uses **Blynk virtual pins** for real-time monitoring:
-
-| Virtual Pin | Function               |
-| ----------- | ---------------------- |
-| V0          | Temperature display    |
-| V1          | Humidity display       |
-| V2          | Heater status          |
-| V3          | Humidifier status      |
-| V4          | System status          |
-| V5          | Incubation day counter |
-| V6          | Stage information      |
-| V7          | Reset incubation timer |
+- Arduino IDE with **ESP8266 board package**
+- Libraries:
+  - `DHT sensor library` (Adafruit)
+  - `Blynk` (latest)
+  - `LiquidCrystal_I2C`
+  - `NTPClient` (for real-time clock sync)
 
 ---
 
-## 🔄 Incubation Logic
+## 🚀 Quick Start
 
-### Temperature Control
+### 1. Set up Arduino IDE
+```
+Board: NodeMCU 1.0 (ESP-12E Module)
+Upload Speed: 115200
+```
 
-* Target temperature: **37 °C**
-* Heater ON if temperature drops below tolerance
-* Heater OFF if temperature exceeds tolerance
+### 2. Configure credentials
+Edit `config.h`:
+```cpp
+#define WIFI_SSID     "your_ssid"
+#define WIFI_PASS     "your_password"
+#define BLYNK_AUTH    "your_blynk_token"
+```
 
-### Humidity Control
-
-| Incubation Stage   | Days  | Humidity Range |
-| ------------------ | ----- | -------------- |
-| Stage 1            | 1–18  | 50–55 %        |
-| Stage 2 (Lockdown) | 19–21 | 65–75 %        |
-
-Automatic switching between stages is based on elapsed time calculated using `millis()`.
-
----
-
-## ⏱️ Incubation Timeline
-
-* Total duration: **21 days**
-* Day counter automatically increments
-* Lockdown warning activated on Day 19
-* Completion notification after Day 21
+### 3. Upload & monitor
+```
+Tools → Serial Monitor → 115200 baud
+```
 
 ---
 
-## ✅ Key Features
+## 📁 Project Structure
 
-* Fully automated incubation control
-* Stage-based humidity regulation
-* Real-time IoT monitoring
-* Sensor error detection
-* Manual reset via mobile app
-* Hysteresis control to protect relays
-
----
-
-## ⚠️ Safety Notes
-
-* Do not open the incubator during **lockdown period (Days 19–21)**
-* Ensure proper electrical isolation for relay modules
-* DHT11 sensor requires minimum 2-second read interval
+```
+Smart-Egg-Incubation-System/
+├── SmartIncubator.ino     # Main Arduino sketch
+├── config.h               # Wi-Fi, Blynk credentials, thresholds
+├── stages.h               # Stage definitions (day ranges, humidity targets)
+├── README.md
+└── Smart Egg Incubation System.png  # Block diagram
+```
 
 ---
 
-## 📌 Conclusion
+## 🌡️ Incubation Stages
 
-This project demonstrates a **reliable, low-cost, and efficient smart incubation system** suitable for academic projects, research prototypes, and small-scale poultry farming. The integration of IoT enhances monitoring accuracy and operational convenience.
+| Stage | Days | Temperature | Humidity |
+|---|---|---|---|
+| Stage 1 (Development) | Day 1–18 | 37.5 °C | 55–60% RH |
+| Stage 2 (Hatching) | Day 19–21 | 37.2 °C | 65–70% RH |
 
 ---
 
+## 🔭 Further Scope / Improvements
+
+- [ ] **Egg turner motor** — auto-rotate eggs every 4 hours (servo/motor relay)
+- [ ] **PID controller** — replace threshold relay with PID for stable temp
+- [ ] **OTA firmware updates** — update ESP8266 remotely via ArduinoOTA
+- [ ] **Data logging** — log temp/humidity to SD card or Firebase for analysis
+- [ ] **Hatch detection** — use IR sensor or microphone to detect hatch events
+- [ ] **Emergency SMS alerts** — Twilio API if temp goes out of range
+- [ ] **Upgrade to DHT22** — ±0.5 °C accuracy vs DHT11's ±2 °C
+- [ ] **Web dashboard** — standalone ESP8266 web server (no Blynk dependency)
+- [ ] **Multi-species profiles** — preset profiles for duck (28 days), quail (17 days)
+
+---
+
+## 🤝 Contributing
+
+See [GitHub repo](https://github.com/OmShirse/Smart-Egg-Incubation-System) for open issues.
+
+---
+
+*Part of the [OmShirse/chess](https://github.com/OmShirse/chess) monorepo*
